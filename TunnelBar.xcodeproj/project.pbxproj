@@ -1,0 +1,257 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00000000000000000000006D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D1 /* AppIcon.icns */; };
+		000000000000000000000064 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C8 /* Models.swift */; };
+		000000000000000000000065 /* ConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C9 /* ConfigStore.swift */; };
+		000000000000000000000066 /* SSHTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CA /* SSHTransport.swift */; };
+		000000000000000000000067 /* TunnelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CB /* TunnelManager.swift */; };
+		000000000000000000000068 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CC /* AppModel.swift */; };
+		000000000000000000000069 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CD /* Notifications.swift */; };
+		00000000000000000000006A /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CE /* Views.swift */; };
+		00000000000000000000006B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CF /* AppDelegate.swift */; };
+		00000000000000000000006C /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D0 /* main.swift */; };
+		00000000000000000000012C /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000190 /* AppKit.framework */; };
+		00000000000000000000012D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000191 /* SwiftUI.framework */; };
+		00000000000000000000012E /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000000192 /* UserNotifications.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0000000000000000000000D1 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = Resources/AppIcon.icns; sourceTree = "<group>"; };
+		0000000000000000000000C8 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		0000000000000000000000C9 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
+		0000000000000000000000CA /* SSHTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHTransport.swift; sourceTree = "<group>"; };
+		0000000000000000000000CB /* TunnelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelManager.swift; sourceTree = "<group>"; };
+		0000000000000000000000CC /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		0000000000000000000000CD /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
+		0000000000000000000000CE /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
+		0000000000000000000000CF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		0000000000000000000000D0 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		000000000000000000000028 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000000010 /* TunnelBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TunnelBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000190 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		000000000000000000000191 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		000000000000000000000192 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		000000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00000000000000000000012C /* AppKit.framework in Frameworks */,
+				00000000000000000000012D /* SwiftUI.framework in Frameworks */,
+				00000000000000000000012E /* UserNotifications.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000003 /* TunnelBar */,
+				000000000000000000000005 /* Frameworks */,
+				000000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000003 /* TunnelBar */ = {
+			isa = PBXGroup;
+			children = (
+				0000000000000000000000C8 /* Models.swift */,
+				0000000000000000000000C9 /* ConfigStore.swift */,
+				0000000000000000000000CA /* SSHTransport.swift */,
+				0000000000000000000000CB /* TunnelManager.swift */,
+				0000000000000000000000CC /* AppModel.swift */,
+				0000000000000000000000CD /* Notifications.swift */,
+				0000000000000000000000CE /* Views.swift */,
+				0000000000000000000000CF /* AppDelegate.swift */,
+				0000000000000000000000D0 /* main.swift */,
+				000000000000000000000028 /* Info.plist */,
+				0000000000000000000000D1 /* AppIcon.icns */,
+			);
+			path = TunnelBar;
+			sourceTree = "<group>";
+		};
+		000000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (000000000000000000000010 /* TunnelBar.app */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000000000005 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000190 /* AppKit.framework */,
+				000000000000000000000191 /* SwiftUI.framework */,
+				000000000000000000000192 /* UserNotifications.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000006 /* TunnelBar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00000000000000000000000B /* Build configuration list for PBXNativeTarget "TunnelBar" */;
+			buildPhases = (
+				000000000000000000000007 /* Sources */,
+				000000000000000000000008 /* Frameworks */,
+				000000000000000000000009 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = TunnelBar;
+			productName = TunnelBar;
+			productReference = 000000000000000000000010 /* TunnelBar.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1200;
+				TargetAttributes = {
+					000000000000000000000006 = {
+						CreatedOnToolsVersion = 12.0;
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "TunnelBar" */;
+			compatibilityVersion = "Xcode 12.0";
+			developmentRegion = zh_CN;
+			hasScannedForEncodings = 0;
+			knownRegions = (zh_CN, en, Base,);
+			mainGroup = 000000000000000000000002;
+			productRefGroup = 000000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (000000000000000000000006 /* TunnelBar */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		000000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (00000000000000000000006D /* AppIcon.icns in Resources */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000064 /* Models.swift in Sources */,
+				000000000000000000000065 /* ConfigStore.swift in Sources */,
+				000000000000000000000066 /* SSHTransport.swift in Sources */,
+				000000000000000000000067 /* TunnelManager.swift in Sources */,
+				000000000000000000000068 /* AppModel.swift in Sources */,
+				000000000000000000000069 /* Notifications.swift in Sources */,
+				00000000000000000000006A /* Views.swift in Sources */,
+				00000000000000000000006B /* AppDelegate.swift in Sources */,
+				00000000000000000000006C /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		00000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		00000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		00000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = 3CFA98BAD8E3B686B594EF51E23367F2404BDC6C;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TunnelBar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks",);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.TunnelBar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		00000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = 3CFA98BAD8E3B686B594EF51E23367F2404BDC6C;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TunnelBar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks",);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.TunnelBar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00000000000000000000000A /* Build configuration list for PBXProject "TunnelBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (00000000000000000000000C /* Debug */, 00000000000000000000000D /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		00000000000000000000000B /* Build configuration list for PBXNativeTarget "TunnelBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (00000000000000000000000E /* Debug */, 00000000000000000000000F /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}
