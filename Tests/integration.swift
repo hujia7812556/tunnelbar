@@ -11,6 +11,7 @@ final class StateRecorder {
     private var states: [UUID: HostRuntimeState] = [:]
     private var revisions: [UUID: Int] = [:]
     private var entries: [UUID: [ConnectionLogEntry]] = [:]
+    private var connectionEvents: [UUID: [ConnectionEvent]] = [:]
 
     /// 后台更新状态。
     func record(_ id: UUID, _ state: HostRuntimeState) {
@@ -44,6 +45,20 @@ final class StateRecorder {
         lock.lock()
         defer { lock.unlock() }
         return entries[id] ?? []
+    }
+
+    /// 收集实际产生的通知事件，供端到端场景核验。
+    func recordEvent(_ id: UUID, _ event: ConnectionEvent) {
+        lock.lock()
+        connectionEvents[id, default: []].append(event)
+        lock.unlock()
+    }
+
+    /// 获取后台产生的通知事件副本。
+    func events(_ id: UUID) -> [ConnectionEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return connectionEvents[id] ?? []
     }
 }
 
@@ -185,6 +200,7 @@ struct IntegrationCheck {
         let recorder = StateRecorder()
         manager.onStateChange = { recorder.record($0, $1) }
         manager.onLog = { recorder.recordLog($0, $1) }
+        manager.onEvent = { recorder.recordEvent($0, $1) }
         defer {
             let finished = DispatchSemaphore(value: 0)
             manager.shutdown { finished.signal() }
@@ -201,6 +217,9 @@ struct IntegrationCheck {
         manager.connect(profile.id)
         try wait("初始连接", recorder: recorder, id: profile.id) {
             $0.phase == .connected && $0.forwards[first.id]?.phase == .listening
+        }
+        guard recorder.events(profile.id).contains(.forwardListening(first)) else {
+            throw CheckFailure(description: "首次监听缺少端口通知事件")
         }
         let original = try EchoClient(port: first.localPort)
         try original.echo("initial")
@@ -222,14 +241,36 @@ struct IntegrationCheck {
         profile.forwards.append(conflict)
         manager.configure([profile])
         try wait("端口冲突", recorder: recorder, id: profile.id) { $0.forwards[conflict.id]?.phase == .failed }
+        let conflictMessage = "无法建立本地监听，请检查地址、端口占用和 SSH 连接状态。"
+        guard recorder.events(profile.id).filter({ $0 == .forwardFailed(conflict, conflictMessage) }).count == 1 else {
+            throw CheckFailure(description: "端口冲突缺少失败通知事件")
+        }
         try original.echo("after-conflict")
 
         profile.forwards[1].isEnabled = false
         manager.configure([profile])
         try wait("取消规则", recorder: recorder, id: profile.id) { $0.forwards[second.id]?.phase == .disabled }
+        let eventsAfterCancel = recorder.events(profile.id)
+        guard eventsAfterCancel.contains(.forwardStopped(second)),
+              eventsAfterCancel.filter({ $0 == .forwardFailed(conflict, conflictMessage) }).count == 1 else {
+            throw CheckFailure(description: "停止监听通知缺失，或相同失败被重复通知")
+        }
         try expectClosed(second.localPort)
         try secondClient.echo("existing-channel-survives-cancel")
         try original.echo("after-cancel")
+
+        // 修改为另一个被占用的端口，应产生新的失败通知。
+        let otherOccupied = try ReservedPort()
+        conflict.localPort = otherOccupied.port
+        profile.forwards[2] = conflict
+        let beforeConflictChange = recorder.snapshot(profile.id).1
+        manager.configure([profile])
+        try wait("变更冲突端口", recorder: recorder, id: profile.id, afterRevision: beforeConflictChange) {
+            $0.forwards[conflict.id]?.phase == .failed
+        }
+        guard recorder.events(profile.id).contains(.forwardFailed(conflict, conflictMessage)) else {
+            throw CheckFailure(description: "更换冲突端口后缺少新的失败通知事件")
+        }
 
         profile.forwards.removeAll { $0.id == conflict.id }
         profile.forwards[0].localPort = occupied.port
@@ -273,6 +314,10 @@ struct IntegrationCheck {
         try wait("自动恢复转发", recorder: recorder, id: profile.id, afterRevision: beforeOutage) {
             $0.phase == .connected && $0.forwards[first.id]?.phase == .listening
         }
+        guard recorder.events(profile.id).contains(.forwardInterrupted(profile.forwards[0])),
+              recorder.events(profile.id).filter({ $0 == .forwardListening(profile.forwards[0]) }).count >= 2 else {
+            throw CheckFailure(description: "SSH 中断和恢复时的端口通知事件缺失")
+        }
         try EchoClient(port: occupied.port).echo("recovered-after-actual-outage")
 
         let beforeRestart = recorder.snapshot(profile.id).1
@@ -288,6 +333,9 @@ struct IntegrationCheck {
         try afterRestart.echo("late-exit-did-not-clobber-new-generation")
         manager.disconnect(profile.id)
         try wait("主动断开", recorder: recorder, id: profile.id) { $0.phase == .disconnected }
+        guard recorder.events(profile.id).contains(.forwardStopped(profile.forwards[0])) else {
+            throw CheckFailure(description: "主动断开时缺少端口停止通知事件")
+        }
         Thread.sleep(forTimeInterval: 2.5)
         guard recorder.get(profile.id).phase == .disconnected else {
             throw CheckFailure(description: "主动断开后不应自动重连")

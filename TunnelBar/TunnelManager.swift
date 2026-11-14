@@ -1,7 +1,9 @@
 import Foundation
 
-enum ConnectionEvent {
+enum ConnectionEvent: Equatable {
     case connected, disconnected, lost, restored, failed(String)
+    case forwardListening(ForwardRule), forwardStopped(ForwardRule), forwardInterrupted(ForwardRule)
+    case forwardFailed(ForwardRule, String)
 
     var text: String {
         switch self {
@@ -10,7 +12,18 @@ enum ConnectionEvent {
         case .lost: return "连接意外中断，正在尝试恢复。"
         case .restored: return "SSH 连接已恢复。业务客户端可能需要重新连接。"
         case .failed(let reason): return reason
+        case .forwardListening(let rule): return "\(forwardLabel(rule)) 已开始监听。"
+        case .forwardStopped(let rule): return "\(forwardLabel(rule)) 已停止监听。"
+        case .forwardInterrupted(let rule): return "\(forwardLabel(rule)) 因 SSH 连接中断而停止监听。"
+        case .forwardFailed(let rule, let reason): return "\(forwardLabel(rule))：\(reason)"
         }
+    }
+
+    /// 用备注和本地地址区分端口转发，不暗示远端服务已连通。
+    private func forwardLabel(_ rule: ForwardRule) -> String {
+        let name = rule.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = name.isEmpty ? "端口转发" : "端口转发“\(name)”"
+        return "\(prefix) [\(rule.bindAddress)]:\(rule.localPort)"
     }
 }
 
@@ -19,6 +32,7 @@ private final class ManagedConnection {
     var ready = false
     var activeRules: [UUID: ForwardRule] = [:]
     var ruleErrors: [UUID: String] = [:]
+    var notifiedRuleFailures: [UUID: (rule: ForwardRule, message: String)] = [:]
     var warning: String?
 
     /// 实际生效规则与用户保存配置分开记录，失败时不冒充已应用。
@@ -195,11 +209,16 @@ final class TunnelManager {
             if cancelled.succeeded {
                 connection.activeRules.removeValue(forKey: id)
                 record(profile.id, "已停止监听：\(describe(active))。")
+                onEvent?(profile.id, .forwardStopped(notificationRule(active, profile: profile)))
                 if wanted[id] != nil { previousRules[id] = active }
+                else { connection.notifiedRuleFailures.removeValue(forKey: id) }
             } else {
-                connection.ruleErrors[id] = "原转发未能停止，可能仍在接收连接；请重试应用规则。"
+                let message = "原转发未能停止，可能仍在接收连接；请重试应用规则。"
+                connection.ruleErrors[id] = message
                 connection.warning = "部分原转发未能撤销。可重试应用规则，或主动断开该主机。"
                 record(profile.id, "停止监听失败：\(describe(active))；原监听可能仍然存在。", level: .error)
+                notifyForwardFailure(profile.id, connection: connection,
+                                     rule: notificationRule(active, profile: profile), message: message)
             }
         }
         for rule in profile.forwards where rule.isEnabled {
@@ -212,7 +231,9 @@ final class TunnelManager {
             let added = transport.control("forward", session: connection.ssh, rule: rule)
             if added.succeeded {
                 connection.activeRules[rule.id] = rule
+                connection.notifiedRuleFailures.removeValue(forKey: rule.id)
                 record(profile.id, "转发已监听：\(describe(rule))。", level: .success)
+                onEvent?(profile.id, .forwardListening(rule))
                 continue
             }
             var message = "无法建立本地监听，请检查地址、端口占用和 SSH 连接状态。"
@@ -220,6 +241,7 @@ final class TunnelManager {
                 let restored = transport.control("forward", session: connection.ssh, rule: previous)
                 if restored.succeeded {
                     connection.activeRules[rule.id] = previous
+                    onEvent?(profile.id, .forwardListening(notificationRule(previous, profile: profile)))
                     message = "修改失败，已恢复原转发；当前保存的新配置尚未生效。"
                 } else {
                     message = "修改失败且未能恢复原转发，请检查端口后重试。"
@@ -227,7 +249,19 @@ final class TunnelManager {
             }
             connection.ruleErrors[rule.id] = message
             record(profile.id, "\(describe(rule))：\(message)", level: .error)
+            notifyForwardFailure(profile.id, connection: connection, rule: rule, message: message)
         }
+        connection.notifiedRuleFailures = connection.notifiedRuleFailures.filter {
+            wanted[$0.key] != nil || connection.activeRules[$0.key] != nil
+        }
+    }
+
+    /// 同一规则和端点的相同失败只提醒一次，端口改变后可重新提醒。
+    private func notifyForwardFailure(_ id: UUID, connection: ManagedConnection, rule: ForwardRule, message: String) {
+        if let previous = connection.notifiedRuleFailures[rule.id],
+           previous.rule.hasSameEndpoint(as: rule), previous.message == message { return }
+        connection.notifiedRuleFailures[rule.id] = (rule, message)
+        onEvent?(id, .forwardFailed(rule, message))
     }
 
     /// 仅处理当前会话的退出，旧会话退出不会移除新连接记录。
@@ -241,6 +275,11 @@ final class TunnelManager {
         }
         if connection.ready {
             recovering.insert(id)
+            if let profile = profiles[id] {
+                for rule in connection.activeRules.values {
+                    onEvent?(id, .forwardInterrupted(notificationRule(rule, profile: profile)))
+                }
+            }
             onEvent?(id, .lost)
             // 已认证连接的旧诊断可能包含某把候选密钥的警告，不能据此停止断线重连。
             failed(id, failure: SSHFailure(message: "SSH 连接意外结束（退出码 \(status)），将重新建立连接。", shouldRetry: true))
@@ -289,6 +328,11 @@ final class TunnelManager {
         let connection = connections.removeValue(forKey: id)
         if let connection = connection { transport.stop(connection.ssh) }
         if wasActive { record(id, "已断开连接，并停止自动重试。") }
+        if announce, let connection = connection, let profile = profiles[id] {
+            for rule in connection.activeRules.values {
+                onEvent?(id, .forwardStopped(notificationRule(rule, profile: profile)))
+            }
+        }
         publish(id, phase: .disconnected)
         if announce && connection?.ready == true { onEvent?(id, .disconnected) }
     }
@@ -309,6 +353,13 @@ final class TunnelManager {
                 record(new.id, "已添加转发配置（\(rule.isEnabled ? "启用" : "停用")）：\(describe(rule))。")
             }
         }
+    }
+
+    /// 通知使用当前备注，但保留实际监听的地址和端口。
+    private func notificationRule(_ rule: ForwardRule, profile: TunnelProfile) -> ForwardRule {
+        var result = rule
+        if let current = profile.forwards.first(where: { $0.id == rule.id }) { result.name = current.name }
+        return result
     }
 
     /// 用地址和端口识别规则，不把备注、密钥路径或 SSH 原始输出写入日志。

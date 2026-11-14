@@ -30,7 +30,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// 通知只使用主机显示名称与经过归纳的状态，不附带 SSH 原始输出。
+    /// 通知使用主机名称和经过归纳的连接或端口状态，不附带 SSH 原始输出。
     func post(name: String, event: ConnectionEvent) {
         center.getNotificationSettings { [weak self] settings in
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }

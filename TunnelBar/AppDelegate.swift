@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// 从菜单栏或 Dock 重新展示现有窗口，不重复创建连接管理器。
     @objc private func showWindow(_ sender: Any?) {
+        NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -102,9 +103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if model.state(for: id).phase.isActive { model.disconnect(id) } else { model.connect(id) }
     }
 
-    /// 关闭主窗口只隐藏，保持菜单栏和端口转发运行。
+    /// 关闭主窗口时隐藏 Dock 图标，保持菜单栏和端口转发运行。
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
         return false
     }
 
