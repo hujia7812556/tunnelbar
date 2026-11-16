@@ -5,39 +5,52 @@ struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var selectedID: UUID?
     @State private var editingProfile: TunnelProfile?
+    @State private var sidebarVisible = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let issue = model.configurationIssue {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("配置读取失败，原文件已保留").font(.headline)
-                        Text(issue).font(.caption)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if let issue = model.configurationIssue {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("配置读取失败，原文件已保留").font(.headline)
+                            Text(issue).font(.caption)
+                        }
+                        Spacer()
+                        Button("查看配置文件") { model.revealConfiguration() }
                     }
-                    Spacer()
-                    Button("查看配置文件") { model.revealConfiguration() }
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    Divider()
                 }
-                .padding()
-                .background(Color.orange.opacity(0.1))
-                Divider()
-            }
 
-            HSplitView {
-                sidebar
-                    .frame(minWidth: 210, idealWidth: 230, maxWidth: 300)
-                if let profile = model.profiles.first(where: { $0.id == selectedID }) {
-                    HostDetailView(model: model, profile: profile) { editingProfile = profile }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    emptySelection
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { splitGeometry in
+                    HSplitView {
+                        if sidebarVisible {
+                            sidebar.frame(minWidth: 190, idealWidth: 220, maxWidth: 280)
+                        }
+                        if let profile = model.profiles.first(where: { $0.id == selectedID }) {
+                            HostDetailView(model: model, profile: profile) { editingProfile = profile }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            emptySelection
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .frame(width: splitGeometry.size.width, height: splitGeometry.size.height)
                 }
             }
+            // 分栏和表格共用窗口实际尺寸，避免原生表格的理想高度扩张整个界面。
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
-        .frame(minWidth: 880, minHeight: 580)
+        .frame(minWidth: 900, minHeight: 560)
         .onAppear { selectAvailableProfile() }
         .onChange(of: model.profiles.map { $0.id }) { _ in selectAvailableProfile() }
+        .onReceive(NotificationCenter.default.publisher(for: .tunnelBarAddHost)) { _ in
+            if model.configurationIssue == nil { editingProfile = TunnelProfile() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tunnelBarToggleSidebar)) { _ in sidebarVisible.toggle() }
         .sheet(item: $editingProfile) { profile in
             HostEditor(profile: profile) { updated in
                 let error = saveProfile(updated)
@@ -61,13 +74,8 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("SSH 主机").font(.headline)
+                Text("主机").font(.subheadline).foregroundColor(.secondary)
                 Spacer()
-                Button(action: { editingProfile = TunnelProfile() }) {
-                    Image(systemName: "plus")
-                }
-                .help("添加主机")
-                .disabled(model.configurationIssue != nil)
             }
             .padding()
             Divider()
@@ -77,12 +85,12 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         Circle().fill(state.phase.color).frame(width: 8, height: 8)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(profile.name).font(.headline).lineLimit(1)
+                            Text(profile.name).font(.body).fontWeight(.medium).lineLimit(1)
                             Text(state.phase.title).font(.caption).foregroundColor(.secondary)
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 3)
                     .tag(profile.id)
                 }
             }
@@ -139,50 +147,67 @@ private struct HostDetailView: View {
     @State private var editingRemarkID: UUID?
     @State private var remarkDraft = ""
     @State private var showingDetails = false
+    @State private var showingSettings = false
+    @State private var showingLogs = false
+    @State private var followsLatest = true
+    @State private var selectedRuleID: UUID?
+    @FocusState private var focusedRemarkID: UUID?
 
     private var state: HostRuntimeState { model.state(for: profile.id) }
+    private var failedRules: [ForwardRule] {
+        profile.forwards.filter { model.ruleState(profileID: profile.id, rule: $0).phase == .failed }
+    }
+    private var listeningCount: Int {
+        profile.forwards.filter { model.ruleState(profileID: profile.id, rule: $0).phase == .listening }.count
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                if let message = state.message {
-                    Text(message)
-                        .font(.callout)
-                        .foregroundColor(state.phase == .connected ? .secondary : .orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let connection = state.connectedConfiguration, connection != profile.connection {
-                    HStack {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("主机连接参数已修改，重连后生效。")
-                        Spacer()
-                        Button("立即重连") { model.reconnect(profile.id) }
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header.fixedSize(horizontal: false, vertical: true)
+                    if let message = state.message {
+                        Text(message)
+                            .font(.callout)
+                            .foregroundColor(state.phase == .connected ? .secondary : .orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(12)
-                    .background(Color.orange.opacity(0.12))
-                    .cornerRadius(8)
+                    if let connection = state.connectedConfiguration, connection != profile.connection {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("主机连接参数已修改，重连后生效。")
+                            Spacer()
+                            Button("立即重连") { model.reconnect(profile.id) }
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(8)
+                    }
+                    forwardList
+                    HStack {
+                        Image(systemName: "info.circle")
+                        Text("已监听表示本机入口已建立，远端服务仍需保持可用。")
+                            .font(.caption).foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .foregroundColor(.secondary)
+                    Divider()
+                    preferences.fixedSize(horizontal: false, vertical: true)
+                    logPanel.fixedSize(horizontal: false, vertical: true)
                 }
-                preferences
-                forwardList
-                HStack {
-                    Text("“已监听”表示本地入口已建立，目标服务仍需保持可用。")
-                        .font(.caption).foregroundColor(.secondary)
-                    Spacer()
-                }
-                Divider()
-                HStack {
-                    Button("编辑主机") { onEditHost() }
-                        .disabled(model.configurationIssue != nil)
-                    Spacer()
-                    Button("删除主机") { removal = .host }
-                        .disabled(model.configurationIssue != nil)
-                }
+                // 小窗口或较长错误信息允许滚动，始终保留设置和日志的入口。
+                .frame(minHeight: max(0, geometry.size.height - 40), alignment: .topLeading)
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(26)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .onChange(of: profile.id) { _ in editingRemarkID = nil }
+        .onChange(of: profile.id) { _ in
+            editingRemarkID = nil
+            selectedRuleID = nil
+            showingSettings = false
+            showingLogs = false
+        }
         .sheet(item: $editingRule) { rule in
             ForwardEditor(rule: rule) { updated in
                 let error = saveRule(updated)
@@ -217,175 +242,221 @@ private struct HostDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(profile.name).font(.largeTitle).fontWeight(.semibold)
-            HStack(spacing: 12) {
-                Image(systemName: "server.rack").foregroundColor(.secondary)
-                Text(profile.connection.hostname)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                Spacer()
-                if state.phase == .connected {
-                    Button("重连") { model.reconnect(profile.id) }
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(profile.name).font(.title2).fontWeight(.semibold).lineLimit(1)
+                    .help(profile.name)
+                HStack(spacing: 8) {
+                    Label(profile.connection.hostname, systemImage: "server.rack")
+                        .lineLimit(1)
+                    Text("·")
+                    Circle().fill(state.phase.color).frame(width: 7, height: 7)
+                    Text(state.phase.title)
                 }
-                Button(state.phase.isActive ? "断开连接" : "连接") {
-                    if state.phase.isActive {
-                        model.disconnect(profile.id)
-                    } else {
-                        model.connect(profile.id)
-                    }
-                }
+                .font(.callout).foregroundColor(.secondary)
             }
-            HStack(spacing: 8) {
-                Circle().fill(state.phase.color).frame(width: 10, height: 10)
-                Text(state.phase.title).foregroundColor(.secondary)
-                Spacer()
-                Button("详细信息…") { showingDetails = true }
+            Spacer(minLength: 12)
+            Button(state.phase.isActive ? "断开连接" : "连接") {
+                if state.phase.isActive { model.disconnect(profile.id) }
+                else { model.connect(profile.id) }
             }
+            .keyboardShortcut("k", modifiers: [.command])
+            Menu {
+                if state.phase == .connected { Button("重新连接") { model.reconnect(profile.id) } }
+                Button("连接详情…") { showingDetails = true }
+                Divider()
+                Button("编辑主机…") { onEditHost() }
+                    .disabled(model.configurationIssue != nil)
+                Button("删除主机…", role: .destructive) { removal = .host }
+                    .disabled(model.configurationIssue != nil)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(BorderlessButtonMenuStyle())
+            .fixedSize()
+            .help("主机操作")
+            .accessibilityLabel("主机操作")
         }
+        .padding(.bottom, 4)
     }
 
     private var preferences: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                Toggle("连接状态变化时发送系统通知", isOn: preferenceBinding(\.notifyOnChange))
-                Divider()
-                Toggle("应用启动时自动连接", isOn: preferenceBinding(\.autoConnect))
-                if profile.notifyOnChange && model.notificationPermissionDenied {
-                    HStack {
-                        Text("系统通知权限未开启，连接功能仍可正常使用。")
-                            .font(.caption).foregroundColor(.secondary)
-                        Spacer()
-                        Button("打开通知设置") { model.openNotificationSettings() }
-                    }
-                }
+        DisclosureGroup("主机设置", isExpanded: $showingSettings) {
+            HStack(spacing: 28) {
+                Toggle("状态变化通知", isOn: preferenceBinding(\.notifyOnChange))
+                    .help("通知此主机和端口转发的状态变化")
+                Toggle("启动时自动连接", isOn: preferenceBinding(\.autoConnect))
+                Spacer(minLength: 0)
             }
-            .toggleStyle(SwitchToggleStyle())
-            .padding(10)
+            .toggleStyle(CheckboxToggleStyle())
+            .padding(.top, 10).padding(.bottom, 4)
             .disabled(model.configurationIssue != nil)
+        }
+        .font(.callout)
+        .overlay(alignment: .topTrailing) {
+            if profile.notifyOnChange && model.notificationPermissionDenied {
+                Button("允许系统通知…") { model.openNotificationSettings() }
+                    .font(.caption).buttonStyle(.link)
+            }
         }
     }
 
     private var forwardList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("本地端口转发").font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Text("端口转发").font(.headline)
+                Text("启用 \(profile.forwards.filter { $0.isEnabled }.count) · 已监听 \(listeningCount)")
+                    .font(.caption).foregroundColor(.secondary)
                 Spacer()
-                if state.phase == .connected {
-                    Button("重试失败规则") { model.retryForwards(profile.id) }
+                if !failedRules.isEmpty {
+                    Button("重试 \(failedRules.count) 条失败规则") { model.retryForwards(profile.id) }
                 }
-                Button(action: addRule) { Label("添加端口", systemImage: "plus") }
+                Button(action: addRule) { Label("添加转发", systemImage: "plus") }
                     .disabled(model.configurationIssue != nil)
             }
             if profile.forwards.isEmpty {
-                Text("添加本机入口和远端目标，连接远程数据库或 Web 服务。")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 100)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(8)
+                VStack(spacing: 10) {
+                    Image(systemName: "arrow.left.arrow.right").font(.title).foregroundColor(.secondary)
+                    Text("尚未添加端口转发").font(.headline)
+                    Text("设置这台 Mac 的入口和 SSH 服务器上的目标。")
+                        .font(.callout).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor.textBackgroundColor))
             } else {
+                GeometryReader { geometry in
+                    portTable.frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .frame(minHeight: 130)
                 HStack(spacing: 12) {
-                    Text("已勾选 \(profile.forwards.filter { $0.isEnabled }.count) / \(profile.forwards.count)")
-                        .font(.caption).foregroundColor(.secondary)
-                    Spacer()
-                    Button("全选") { setAllRulesEnabled(true) }
+                    Button("全部启用") { setAllRulesEnabled(true) }
                         .disabled(model.configurationIssue != nil || profile.forwards.allSatisfy { $0.isEnabled })
-                    Button("取消全选") { setAllRulesEnabled(false) }
+                    Button("全部停用") { setAllRulesEnabled(false) }
                         .disabled(model.configurationIssue != nil || profile.forwards.allSatisfy { !$0.isEnabled })
+                    Spacer()
+                    Text("勾选即启用").foregroundColor(.secondary)
                 }
-                Text("勾选即启用，已连接时立即生效；备注可直接点击编辑。")
-                    .font(.caption).foregroundColor(.secondary)
-                VStack(spacing: 0) {
-                    HStack {
-                        Text("这台 Mac 的入口").frame(maxWidth: .infinity, alignment: .leading)
-                        Text("SSH 服务器上的目标").frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.leading, 46).padding(.trailing, 98).padding(.vertical, 12)
+                .font(.caption).controlSize(.small)
+            }
+            if let rule = failedRules.first(where: { $0.id == selectedRuleID }) ?? failedRules.first,
+               let message = model.ruleState(profileID: profile.id, rule: rule).message {
+                Label {
+                    Text("\(endpoint(rule.bindAddress, port: rule.localPort))：\(message)")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle").foregroundColor(.orange)
+                }
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var portTable: some View {
+        Table(profile.forwards, selection: $selectedRuleID) {
+            TableColumn("启用") { rule in
+                Toggle("启用 \(String(rule.localPort))", isOn: Binding(
+                    get: { rule.isEnabled },
+                    set: { enabled in var updated = rule; updated.isEnabled = enabled; updateRule(updated) }
+                ))
+                .labelsHidden().toggleStyle(CheckboxToggleStyle())
+                .disabled(model.configurationIssue != nil)
+            }.width(38)
+            TableColumn("备注") { rule in remarkCell(rule) }.width(min: 95, ideal: 125)
+            TableColumn("本地入口") { rule in endpointCell(endpoint(rule.bindAddress, port: rule.localPort)) }
+                .width(min: 145, ideal: 165)
+            TableColumn("远端目标") { rule in endpointCell(endpoint(rule.remoteHost, port: rule.remotePort)) }
+                .width(min: 145, ideal: 165)
+            TableColumn("状态") { rule in
+                let runtime = model.ruleState(profileID: profile.id, rule: rule)
+                HStack(spacing: 6) {
+                    Circle().fill(runtime.phase.color).frame(width: 6, height: 6)
+                    Text(runtime.phase.title).font(.caption)
+                }.help(runtime.message ?? runtime.phase.title)
+            }.width(75)
+            TableColumn("") { rule in
+                Menu {
+                    Button("编辑转发…") { editingRule = rule }
+                    Button("编辑备注") { beginEditingRemark(rule) }
                     Divider()
-                    ForEach(profile.forwards) { rule in
-                        forwardRow(rule)
-                        if rule.id != profile.forwards.last?.id { Divider() }
-                    }
-                }
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
+                    Button("删除转发…", role: .destructive) { removal = .rule(rule) }
+                } label: { Image(systemName: "ellipsis") }
+                .menuStyle(BorderlessButtonMenuStyle()).fixedSize()
+                .accessibilityLabel("端口 \(String(rule.localPort)) 的操作")
+                .disabled(model.configurationIssue != nil)
+            }.width(24)
+        }
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            if model.configurationIssue == nil, let id = ids.first, let rule = profile.forwards.first(where: { $0.id == id }) {
+                Button("编辑转发…") { editingRule = rule }
+                Button("编辑备注") { beginEditingRemark(rule) }
+                Button("删除转发…", role: .destructive) { removal = .rule(rule) }
+            }
+        } primaryAction: { ids in
+            if model.configurationIssue == nil, let id = ids.first { editingRule = profile.forwards.first(where: { $0.id == id }) }
+        }
+        .onDeleteCommand {
+            if model.configurationIssue == nil, let rule = profile.forwards.first(where: { $0.id == selectedRuleID }) {
+                removal = .rule(rule)
             }
         }
     }
 
-    /// 单条转发的启用开关和运行结果保持独立，失败不遮盖其他规则。
-    private func forwardRow(_ rule: ForwardRule) -> some View {
-        let runtime = model.ruleState(profileID: profile.id, rule: rule)
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 12) {
-                Toggle("启用 \(String(rule.localPort)) → \(String(rule.remotePort))", isOn: Binding(
-                    get: { rule.isEnabled },
-                    set: { enabled in
-                        var updated = rule
-                        updated.isEnabled = enabled
-                        updateRule(updated)
-                    }
-                ))
-                .labelsHidden()
-                .toggleStyle(CheckboxToggleStyle())
-                .help("勾选后启用这条端口映射")
-                .disabled(model.configurationIssue != nil)
-                VStack(alignment: .leading, spacing: 4) {
-                    if editingRemarkID == rule.id {
-                        HStack(spacing: 8) {
-                            TextField("备注（可选）", text: $remarkDraft, onCommit: { saveRemark(rule.id) })
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Button("保存") { saveRemark(rule.id) }
-                            Button("取消") { editingRemarkID = nil }
-                        }
-                        .font(.caption)
-                        .disabled(model.configurationIssue != nil)
-                    } else {
-                        Button(action: { beginEditingRemark(rule) }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "note.text")
-                                Text(rule.name.isEmpty ? "添加备注" : rule.name)
-                                    .lineLimit(2).multilineTextAlignment(.leading)
-                                Image(systemName: "pencil").imageScale(.small)
-                            }
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .font(.caption).foregroundColor(.secondary)
-                        .help(rule.name.isEmpty ? "添加备注" : "编辑备注：\(rule.name)")
-                        .disabled(model.configurationIssue != nil)
-                    }
-                    HStack(spacing: 12) {
-                        // 端口作为地址文本显示，不能使用本地化数字的千位分隔符。
-                        Text("\(rule.bindAddress):\(String(rule.localPort))")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "arrow.right").foregroundColor(.secondary)
-                        Text("\(rule.remoteHost):\(String(rule.remotePort))")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                    HStack(spacing: 5) {
-                        Circle().fill(runtime.phase.color).frame(width: 6, height: 6)
-                        Text(runtime.phase.title).font(.caption).foregroundColor(.secondary)
-                    }
-                }
-                Button("编辑") {
-                    editingRemarkID = nil
-                    editingRule = rule
-                }
-                    .disabled(model.configurationIssue != nil)
-                Button(action: { removal = .rule(rule) }) { Image(systemName: "trash") }
-                    .help("删除转发")
-                    .disabled(model.configurationIssue != nil)
+    /// 地址使用等宽字体并提供完整提示，长地址不会撑坏表格。
+    private func endpointCell(_ endpoint: String) -> some View {
+        Text(endpoint).font(.system(.body, design: .monospaced)).lineLimit(1)
+            .truncationMode(.middle).help(endpoint)
+    }
+
+    /// IPv6 地址加上方括号，与端口保持明确边界。
+    private func endpoint(_ host: String, port: Int) -> String {
+        "\(host.contains(":") ? "[\(host)]" : host):\(String(port))"
+    }
+
+    /// 备注保留明确保存与取消操作，纯备注编辑不会触发重连。
+    @ViewBuilder private func remarkCell(_ rule: ForwardRule) -> some View {
+        if editingRemarkID == rule.id {
+            HStack(spacing: 4) {
+                TextField("备注", text: $remarkDraft, onCommit: { saveRemark(rule.id) })
+                    .textFieldStyle(.plain)
+                    .focused($focusedRemarkID, equals: rule.id)
+                    .onExitCommand { editingRemarkID = nil }
+                Button(action: { saveRemark(rule.id) }) { Image(systemName: "checkmark") }
+                    .buttonStyle(.borderless).help("保存备注")
             }
-            if let message = runtime.message {
-                Text(message).font(.caption).foregroundColor(.orange)
-                    .padding(.leading, 30)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        } else {
+            Button(action: { beginEditingRemark(rule) }) {
+                Text(rule.name.isEmpty ? "添加备注" : rule.name).lineLimit(1)
+                    .foregroundColor(rule.name.isEmpty ? .secondary : .primary)
+            }.buttonStyle(.plain).help("编辑备注")
         }
-        .padding(12)
+    }
+
+    private var logPanel: some View {
+        DisclosureGroup("连接日志", isExpanded: $showingLogs) {
+            VStack(spacing: 8) {
+                HStack {
+                    Text("最近 \(model.logs[profile.id]?.count ?? 0) 条").foregroundColor(.secondary)
+                    Spacer()
+                    Toggle("跟随最新", isOn: $followsLatest).toggleStyle(CheckboxToggleStyle())
+                    Button("复制日志", action: copyLogs).disabled(model.logs[profile.id, default: []].isEmpty)
+                    Button("连接详情…") { showingDetails = true }
+                }.font(.caption).controlSize(.small)
+                if let issue = model.logStorageIssue { Text(issue).font(.caption).foregroundColor(.orange) }
+                ConnectionLogList(entries: model.logs[profile.id] ?? [], followsLatest: $followsLatest)
+                    .frame(height: 155)
+            }.padding(.top, 10)
+        }
+        .font(.callout)
+    }
+
+    /// 复制当前主机的可见日志，不包含其他主机的数据。
+    private func copyLogs() {
+        let text = (["主机：\(profile.name)（\(profile.connection.hostname)）"] +
+                    (model.logs[profile.id] ?? []).map { $0.plainText }).joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// 批量勾选只保存一次最新配置，由连接管理器调整实际变化的端口。
@@ -399,6 +470,7 @@ private struct HostDetailView: View {
     private func beginEditingRemark(_ rule: ForwardRule) {
         remarkDraft = rule.name
         editingRemarkID = rule.id
+        focusedRemarkID = rule.id
     }
 
     /// 仅修改最新规则的备注，避免覆盖编辑期间刚切换的勾选状态。
@@ -497,44 +569,7 @@ struct ConnectionDetailsView: View {
                 Text(issue).font(.caption).foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ScrollViewReader { reader in
-                ScrollView {
-                    if entries.isEmpty {
-                        Text("暂无日志。连接主机或调整端口配置后，记录会显示在这里。")
-                            .foregroundColor(.secondary).padding(24)
-                    } else {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(entries) { entry in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 8) {
-                                        Text(entry.timestamp.formatted(date: .numeric, time: .standard))
-                                            .foregroundColor(.secondary)
-                                        Text(entry.level.title).foregroundColor(entry.level.color)
-                                    }
-                                    .font(.system(.caption, design: .monospaced))
-                                    Text(entry.message).foregroundColor(entry.level.color)
-                                        .font(.system(.callout, design: .monospaced))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .textSelection(.enabled)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(entry.id)
-                            }
-                        }
-                        .padding(14)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.textBackgroundColor))
-                .cornerRadius(8)
-                .onAppear { if let id = entries.last?.id { reader.scrollTo(id, anchor: .bottom) } }
-                .onChange(of: entries.last?.id) { id in
-                    if followsLatest, let id = id { reader.scrollTo(id, anchor: .bottom) }
-                }
-                .onChange(of: followsLatest) { enabled in
-                    if enabled, let id = entries.last?.id { reader.scrollTo(id, anchor: .bottom) }
-                }
-            }
+            ConnectionLogList(entries: entries, followsLatest: $followsLatest)
             HStack {
                 Text("每个主机保留最近 300 条；日志不记录转发的业务内容。")
                     .font(.caption).foregroundColor(.secondary)
@@ -560,6 +595,52 @@ struct ConnectionDetailsView: View {
         let text = (["主机：\(profile.name)（\(connection.hostname)）"] + entries.map { $0.plainText }).joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+private struct ConnectionLogList: View {
+    let entries: [ConnectionLogEntry]
+    @Binding var followsLatest: Bool
+
+    var body: some View {
+        ScrollViewReader { reader in
+            ScrollView {
+                if entries.isEmpty {
+                    Text("暂无日志。连接主机或调整端口配置后，记录会显示在这里。")
+                        .foregroundColor(.secondary).padding(24)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(entries) { entry in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Text(entry.timestamp.formatted(date: .numeric, time: .standard))
+                                        .foregroundColor(.secondary)
+                                    Text(entry.level.title).foregroundColor(entry.level.color)
+                                }
+                                .font(.system(.caption, design: .monospaced))
+                                Text(entry.message).foregroundColor(entry.level.color)
+                                    .font(.system(.callout, design: .monospaced))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(entry.id)
+                        }
+                    }
+                    .padding(14)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(NSColor.textBackgroundColor))
+            .cornerRadius(8)
+            .onAppear { if let id = entries.last?.id { reader.scrollTo(id, anchor: .bottom) } }
+            .onChange(of: entries.last?.id) { id in
+                if followsLatest, let id = id { reader.scrollTo(id, anchor: .bottom) }
+            }
+            .onChange(of: followsLatest) { enabled in
+                if enabled, let id = entries.last?.id { reader.scrollTo(id, anchor: .bottom) }
+            }
+        }
     }
 }
 

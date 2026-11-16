@@ -2,7 +2,12 @@ import AppKit
 import SwiftUI
 import Combine
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+extension Notification.Name {
+    static let tunnelBarAddHost = Notification.Name("TunnelBar.addHost")
+    static let tunnelBarToggleSidebar = Notification.Name("TunnelBar.toggleSidebar")
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSToolbarDelegate, NSToolbarItemValidation {
     private var model: AppModel?
     private var window: NSWindow?
     private var statusItem: NSStatusItem?
@@ -24,15 +29,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1080, height: 680),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "TunnelBar"
-        window.minSize = NSSize(width: 860, height: 560)
-        window.contentView = NSHostingView(rootView: ContentView(model: model))
+        window.minSize = NSSize(width: 900, height: 560)
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        let toolbar = NSToolbar(identifier: "TunnelBarToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
+        let hostingView = NSHostingView(rootView: ContentView(model: model))
+        // 窗口决定可用尺寸，避免表格的理想高度反向撑大托管视图。
+        hostingView.sizingOptions = []
+        window.contentView = hostingView
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("TunnelBarMainWindow")
         window.center()
         self.window = window
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem?.button?.image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: "TunnelBar")
+        statusItem?.button?.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "TunnelBar")?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+        statusItem?.button?.image?.isTemplate = true
         statusItem?.button?.toolTip = "TunnelBar"
         if statusItem?.button?.image == nil { statusItem?.button?.title = "TB" }
         rebuildStatusMenu()
@@ -52,6 +67,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appMenu.addItem(withTitle: "退出 TunnelBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
+        let fileItem = NSMenuItem()
+        let file = NSMenu(title: "文件")
+        let add = NSMenuItem(title: "新建主机…", action: #selector(addHost(_:)), keyEquivalent: "n")
+        add.target = self
+        file.addItem(add)
+        fileItem.submenu = file
+        main.addItem(fileItem)
         let editItem = NSMenuItem()
         let edit = NSMenu(title: "编辑")
         edit.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
@@ -61,7 +83,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         main.addItem(editItem)
+        let viewItem = NSMenuItem()
+        let view = NSMenu(title: "显示")
+        let sidebar = NSMenuItem(title: "显示／隐藏侧栏", action: #selector(toggleSidebar(_:)), keyEquivalent: "s")
+        sidebar.keyEquivalentModifierMask = [.command, .control]
+        sidebar.target = self
+        view.addItem(sidebar)
+        viewItem.submenu = view
+        main.addItem(viewItem)
         NSApp.mainMenu = main
+    }
+
+    /// 标题栏只保留全局导航和添加主机，主机操作留在详情区域。
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [NSToolbarItem.Identifier("toggleHostSidebar"), .flexibleSpace, NSToolbarItem.Identifier("addHost")]
+    }
+
+    /// 原生工具栏沿用默认项目，不引入额外配置。
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    /// 用系统符号创建工具栏项目，使系统处理悬停和深浅色外观。
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        item.target = self
+        if itemIdentifier.rawValue == "toggleHostSidebar" {
+            item.label = "显示／隐藏侧栏"
+            item.toolTip = "显示／隐藏侧栏（⌃⌘S）"
+            item.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: item.label)
+            item.action = #selector(toggleSidebar(_:))
+        } else {
+            item.label = "添加主机"
+            item.toolTip = "添加主机（⌘N）"
+            item.image = NSImage(systemSymbolName: "plus", accessibilityDescription: item.label)
+            item.action = #selector(addHost(_:))
+        }
+        return item
+    }
+
+    /// 配置读取失败时同步禁用工具栏中的写操作。
+    func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+        item.itemIdentifier.rawValue != "addHost" || model?.configurationIssue == nil
+    }
+
+    /// 交给主窗口弹出已有的主机编辑表单。
+    @objc private func addHost(_ sender: Any?) {
+        showWindow(nil)
+        NotificationCenter.default.post(name: .tunnelBarAddHost, object: nil)
+    }
+
+    /// 切换侧栏只影响显示，不修改任何连接配置。
+    @objc private func toggleSidebar(_ sender: Any?) {
+        NotificationCenter.default.post(name: .tunnelBarToggleSidebar, object: nil)
     }
 
     /// 菜单显示主机状态，当前连接或重连中的主机点击后执行主动断开。
