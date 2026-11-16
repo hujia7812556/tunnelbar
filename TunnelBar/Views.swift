@@ -281,7 +281,7 @@ private struct HostDetailView: View {
     }
 
     private var preferences: some View {
-        DisclosureGroup("主机设置", isExpanded: $showingSettings) {
+        DisclosureGroup(isExpanded: $showingSettings) {
             HStack(spacing: 28) {
                 Toggle("状态变化通知", isOn: preferenceBinding(\.notifyOnChange))
                     .help("通知此主机和端口转发的状态变化")
@@ -291,6 +291,9 @@ private struct HostDetailView: View {
             .toggleStyle(CheckboxToggleStyle())
             .padding(.top, 10).padding(.bottom, 4)
             .disabled(model.configurationIssue != nil)
+        } label: {
+            Button("主机设置") { showingSettings.toggle() }
+                .buttonStyle(.plain)
         }
         .font(.callout)
         .overlay(alignment: .topTrailing) {
@@ -434,7 +437,7 @@ private struct HostDetailView: View {
     }
 
     private var logPanel: some View {
-        DisclosureGroup("连接日志", isExpanded: $showingLogs) {
+        DisclosureGroup(isExpanded: $showingLogs) {
             VStack(spacing: 8) {
                 HStack {
                     Text("最近 \(model.logs[profile.id]?.count ?? 0) 条").foregroundColor(.secondary)
@@ -447,6 +450,9 @@ private struct HostDetailView: View {
                 ConnectionLogList(entries: model.logs[profile.id] ?? [], followsLatest: $followsLatest)
                     .frame(height: 155)
             }.padding(.top, 10)
+        } label: {
+            Button("连接日志") { showingLogs.toggle() }
+                .buttonStyle(.plain)
         }
         .font(.callout)
     }

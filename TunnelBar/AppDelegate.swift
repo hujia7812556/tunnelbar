@@ -46,8 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         window.center()
         self.window = window
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem?.button?.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "TunnelBar")?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
-        statusItem?.button?.image?.isTemplate = true
+        statusItem?.button?.image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: "TunnelBar")
         statusItem?.button?.toolTip = "TunnelBar"
         if statusItem?.button?.image == nil { statusItem?.button?.title = "TB" }
         rebuildStatusMenu()
